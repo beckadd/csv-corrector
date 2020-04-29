@@ -1,0 +1,69 @@
+---
+title: "csv-corrector"
+author: "Beck Addison"
+date: "4/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(reshape2)
+
+```
+
+```{r data-import}
+csv_data <- read_csv("data/donortools.csv")
+```
+```{r functs}
+separate_donations <- function(df) {
+  greatest <- 0;
+  for (row in 1:nrow(df)) {
+    string_vector = unlist(str_split(
+      string = df[row, "donation"],
+      pattern = "\n",
+      n = Inf
+    ), use.names = FALSE)
+    if (length(string_vector) > greatest) {
+      greatest <- length(string_vector)
+      print(greatest)
+    }
+  }
+  #we've figured out the greatest no of donations, now we have to split along that number
+  sep_vector <- c()
+  for (i in 1:greatest) {
+      sep_vector <- append(sep_vector, paste("don",i))
+  }
+  df <- df %>%
+    separate(
+      col = "donation",
+      into = sep_vector,
+      sep = "\n",
+    )
+  
+  df <- df %>%
+    pivot_longer(
+      cols = sep_vector,
+      values_to = "donation"
+    )
+  
+    return(df)
+}
+```
+
+```{r initial-data-cleansing}
+csv_data_flat <- csv_data %>%
+  pivot_longer(
+    cols = grep(
+        pattern = "Itemized Donations in",
+        ignore.case = TRUE,
+        x = colnames(csv_data)
+        ),
+    names_to = "don_year",
+    values_to = "donation"
+    )
+
+csv_data_flat2 <- separate_donations(csv_data_flat)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
