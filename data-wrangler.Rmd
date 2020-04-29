@@ -59,41 +59,83 @@ split_donation <- function(df) {
   df <- df %>%
     separate(
       col = "donation",
-      into = c("AMOUNT", "GIFT_NARRATIVE|GIFT_DATE|CHECKINFO"),
+      into = c("AMOUNT1","AMOUNT2"),
+      sep = " and "
+    )
+  df <- df %>%
+    separate(
+      col = "AMOUNT1",
+      into = c("AMOUNT1", "GIFT_NARRATIVE1|GIFT_DATE1|CHECKINFO1"),
       sep = " for "
     )
   df <- df %>%
     separate(
-      col = "GIFT_NARRATIVE|GIFT_DATE|CHECKINFO",
-      into = c("GIFT_NARRATIVE", "GIFT_DATE|CHECKINFO"),
+      col = "GIFT_NARRATIVE1|GIFT_DATE1|CHECKINFO1",
+      into = c("GIFT_NARRATIVE1", "GIFT_DATE1|CHECKINFO1"),
       sep = " received on "
     )
    df <- df %>%
+     separate(
+      col = "GIFT_DATE1|CHECKINFO1",
+      into = c("GIFT_DATE1", "CHECKINFO1"),
+      sep = " \\("
+    )
+  df <- df %>%
     separate(
-      col = "GIFT_DATE|CHECKINFO",
-      into = c("GIFT_DATE", "CHECKINFO"),
+      col = "AMOUNT2",
+      into = c("AMOUNT2", "GIFT_NARRATIVE2|GIFT_DATE2|CHECKINFO2"),
+      sep = " for "
+    )
+  df <- df %>%
+    separate(
+      col = "GIFT_NARRATIVE2|GIFT_DATE2|CHECKINFO2",
+      into = c("GIFT_NARRATIVE2", "GIFT_DATE2|CHECKINFO2"),
+      sep = " received on "
+    )
+  df <- df %>%
+    separate(
+      col = "GIFT_DATE2|CHECKINFO2",
+      into = c("GIFT_DATE2", "CHECKINFO2"),
       sep = " \\("
     )
    
-   df$CHECKINFO <- gsub("[^0-9.-]","", df$CHECKINFO)
-    
-   df <- df %>%
-     separate(
-       col = "GIFT_NARRATIVE",
-       into = c("GIFT_NARRATIVE", "ADDN_MONEY"),
-       sep = " and "
-     )
-   df$AMOUNT <- as.numeric(gsub('\\$', '', df$AMOUNT))
-   df$ADDN_MONEY <- as.numeric(gsub('\\$','', df$ADDN_MONEY))
+   df$CHECKINFO1 <- gsub("[^0-9.-]","", df$CHECKINFO1)
+   df$CHECKINFO2 <- gsub("[^0-9.-]","", df$CHECKINFO2)
+
+   df$AMOUNT1 <- as.numeric(gsub('\\$', '', df$AMOUNT1))
+   df$AMOUNT2 <- as.numeric(gsub('\\$','', df$AMOUNT2))
+   
    
    df <- df %>%
-     mutate(AMOUNT = 
-       case_when(
-          !is.na(ADDN_MONEY) ~ AMOUNT + ADDN_MONEY,
-          TRUE ~ AMOUNT
-          )
-       ) %>%
-     select(-ADDN_MONEY)
+     mutate(
+       AMOUNT = case_when(
+          !is.na(AMOUNT2) ~ AMOUNT1 + AMOUNT2,
+          TRUE ~ AMOUNT1
+          ),
+       GIFT_DATE = case_when(
+         !is.na(GIFT_DATE2) ~ GIFT_DATE2,
+         TRUE ~ GIFT_DATE1
+       ),
+       GIFT_NARRATIVE = case_when(
+         !is.na(GIFT_NARRATIVE2) ~ paste(GIFT_NARRATIVE1, GIFT_NARRATIVE2, sep = " and "),
+         TRUE ~ GIFT_NARRATIVE1
+       ),
+       CHECKINFO = case_when(
+         !is.na(CHECKINFO2) ~ CHECKINFO2,
+         TRUE ~ CHECKINFO1
+       )
+     ) %>%
+     select(
+       -GIFT_DATE1,
+       -GIFT_DATE2,
+       -GIFT_NARRATIVE1,
+       -GIFT_NARRATIVE2,
+       -AMOUNT1,
+       -AMOUNT2,
+       -CHECKINFO1,
+       -CHECKINFO2,
+     )
+      
    
   return(df)
 }
@@ -179,7 +221,7 @@ csv_data_flat <- csv_data_flat %>%
 ```
 
 
-```{r final-export}
+```{r select}
 final_export <- csv_data_flat %>%
   select(
     ORG_REC,
@@ -211,5 +253,14 @@ final_export <- csv_data_flat %>%
     REF,
     GIFT_TYPE,
     GIFT_NARRATIVE
+  )
+```
+
+```{r export}
+write.csv(
+  x = final_export,
+  file = "data/final.csv",
+  na = "",
+  sep = ","
   )
 ```
