@@ -9,12 +9,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(reshape2)
-
 ```
 
 ```{r data-import}
 csv_data <- read_csv("data/donortools.csv")
 ```
+
+
 ```{r functs}
 separate_donations <- function(df) {
   greatest <- 0;
@@ -39,6 +40,7 @@ separate_donations <- function(df) {
       col = "donation",
       into = sep_vector,
       sep = "\n",
+      extra = "drop"
     )
   
   df <- df %>%
@@ -46,8 +48,112 @@ separate_donations <- function(df) {
       cols = sep_vector,
       values_to = "donation"
     )
+  df <- df %>%
+    filter(!is.na(donation))
   
     return(df)
+}
+
+
+split_donation <- function(df) {
+  df <- df %>%
+    separate(
+      col = "donation",
+      into = c("AMOUNT", "GIFT_NARRATIVE|GIFT_DATE|CHECKINFO"),
+      sep = " for "
+    )
+  df <- df %>%
+    separate(
+      col = "GIFT_NARRATIVE|GIFT_DATE|CHECKINFO",
+      into = c("GIFT_NARRATIVE", "GIFT_DATE|CHECKINFO"),
+      sep = " received on "
+    )
+   df <- df %>%
+    separate(
+      col = "GIFT_DATE|CHECKINFO",
+      into = c("GIFT_DATE", "CHECKINFO"),
+      sep = " \\("
+    )
+   
+   df$CHECKINFO <- gsub("[^0-9.-]","", df$CHECKINFO)
+    
+   df <- df %>%
+     separate(
+       col = "GIFT_NARRATIVE",
+       into = c("GIFT_NARRATIVE", "ADDN_MONEY"),
+       sep = " and "
+     )
+   df$AMOUNT <- as.numeric(gsub('\\$', '', df$AMOUNT))
+   df$ADDN_MONEY <- as.numeric(gsub('\\$','', df$ADDN_MONEY))
+   
+   df <- df %>%
+     mutate(AMOUNT = 
+       case_when(
+          !is.na(ADDN_MONEY) ~ AMOUNT + ADDN_MONEY,
+          TRUE ~ AMOUNT
+          )
+       ) %>%
+     select(-ADDN_MONEY)
+   
+  return(df)
+}
+
+code_items <- function(df) {
+  df <- df %>%
+    mutate(
+      ORG_REC = case_when(
+        (!is.na(`Company Name`))  ~ "Y",
+        TRUE ~ "N"
+      ),
+      DONOR_TYPE = case_when(
+        (!is.na(`Company Name`) && `Is Company?`) ~ "CO",
+        (!is.na(`Company Name`) && !`Is Company?`) ~ "FN",
+        TRUE ~ "IN"
+      ),
+      GIFT_TYPE = case_when(
+        (!is.na(CHECKINFO)) ~ "CH",
+        TRUE ~ NA_character_
+      ),
+      REF = case_when(
+        (!is.na(CHECKINFO)) ~ CHECKINFO,
+        TRUE ~ NA_character_
+      ),
+      State = toupper(State)
+    )
+  df$REF <- gsub("[^0-9]", "", df$REF)
+  df$`Phone Number` <- gsub("[^0-9]", "", df$`Phone Number`)
+  df$`Phone Number 2` <- gsub("[^0-9]", "", df$`Phone Number 2`)
+  
+  df <- df %>%
+    mutate(
+      BUSINESS_PHONE = case_when(
+        (DONOR_TYPE == "CO")||(DONOR_TYPE == "FN") ~ `Phone Number`,
+        TRUE ~ NA_character_
+      ),
+      MOBILE_PHONE = case_when(
+        (DONOR_TYPE == "CO")||(DONOR_TYPE == "FN") ~ `Phone Number 2`,
+        TRUE ~ `Phone Number`
+      ),
+      HOME_PHONE = case_when(
+        (DONOR_TYPE == "IN") ~ `Phone Number 2`,
+        TRUE ~ NA_character_
+      )
+    )
+  return(df)
+}
+
+add_extraneous_columns <- function(df) {
+  df <- df %>%
+    mutate(
+      SPOUSE = NA,
+      FAX_PHONE = NA,
+      FMV = NA,
+      GL_CODE = NA,
+      CAMPAIGN = NA,
+      SOLICIT_CODE = NA,
+      SUB_SOLICIT_CODE = NA,
+    )
+  return(df)
 }
 ```
 
@@ -63,7 +169,49 @@ csv_data_flat <- csv_data %>%
     values_to = "donation"
     )
 
-csv_data_flat2 <- separate_donations(csv_data_flat)
+
+csv_data_flat <- csv_data_flat %>%
+  separate_donations() %>%
+  split_donation() %>%
+  code_items() %>%
+  add_extraneous_columns()
+
+```
+
+
+```{r final-export}
+final_export <- csv_data_flat %>%
+  select(
+    ORG_REC,
+    DONOR_TYPE,
+    TITLE = `Prefix`,
+    FIRST_NAME = `First Name`,
+    LAST_NAME = `Last Name`,
+    OPT_LINE = `Full Name 2`,
+    SPOUSE,
+    SALUTATION = `Recognition Name`,
+    ADDRESS = `Street Address`,
+    ADDRESS2 = `Street Address 2`,
+    CITY = `City`,
+    STATE = `State`,
+    ZIP = `Postal Code`,
+    ADDRESS_TYPE = `Address Type`,
+    MOBILE_PHONE,
+    BUSINESS_PHONE,
+    HOME_PHONE,
+    FAX_PHONE,
+    EMAIL = `Email Address`,
+    GIFT_DATE,
+    AMOUNT,
+    FMV,
+    GL_CODE,
+    CAMPAIGN,
+    SOLICIT_CODE,
+    SUB_SOLICIT_CODE,
+    REF,
+    GIFT_TYPE,
+    GIFT_NARRATIVE
+  )
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
