@@ -8,133 +8,138 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(lubridate)
 library(reshape2)
 ```
 
 ```{r data-import}
-csv_data <- read_csv("data/donortools.csv")
+csv_data <- read_csv("data/donortools-updated.csv")
+recurring_data <- read_csv("data/recurring-info.csv")
+
+name_table <- data.frame(
+  first_name = c(
+    "Brett and Annie",
+    "Casey and Meg",
+    "Daniel and Kristen",
+    "Heather",
+    "Kayla",
+    "Kayla",
+    "Maggie",
+    "Philem",
+    "Rachel",
+    "Rob and Mauri",
+    "Shelby",
+    "Tracy",
+    "Sarah",
+    "Annie",
+    "Jason",
+    "Rachel",
+    "Sarah",
+    "Sarah",
+    "Nate and Haley",
+    "Tracey",
+    "Amelia",
+    "Rob and Pearl",
+    "Angela"
+  ),
+  last_name = c(
+    "Balsley",
+    "Herring",
+    "McDonald",
+    "Wrench",
+    "Miller",
+    "Sumile",
+    "Addison",
+    "Andress",
+    "Hill",
+    "Moser",
+    "Davis",
+    "Frohlich",
+    "Hindin",
+    "Hindin",
+    "Faircloth",
+    "Gracy",
+    "Quigg",
+    "Santos",
+    "Tew",
+    "Frolich",
+    "Klacik",
+    "Hernandez",
+    "Fontanelli"
+  ),
+  ID = c(
+    "1020",
+    "1001",
+    "1013",
+    "1026",
+    "1017",
+    "1024",
+    "1019",
+    "1023",
+    "1021",
+    "1010",
+    "1022",
+    "1009",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "1009",
+    "",
+    "",
+    ""
+  )
+)
 ```
 
-
-```{r functs}
-separate_donations <- function(df) {
-  greatest <- 0;
-  for (row in 1:nrow(df)) {
-    string_vector = unlist(str_split(
-      string = df[row, "donation"],
-      pattern = "\n",
-      n = Inf
-    ), use.names = FALSE)
-    if (length(string_vector) > greatest) {
-      greatest <- length(string_vector)
-      print(greatest)
-    }
-  }
-  #we've figured out the greatest no of donations, now we have to split along that number
-  sep_vector <- c()
-  for (i in 1:greatest) {
-      sep_vector <- append(sep_vector, paste("don",i))
-  }
-  df <- df %>%
-    separate(
-      col = "donation",
-      into = sep_vector,
-      sep = "\n",
-      extra = "drop"
-    )
-  
-  df <- df %>%
-    pivot_longer(
-      cols = sep_vector,
-      values_to = "donation"
-    )
-  df <- df %>%
-    filter(!is.na(donation))
-  
-    return(df)
-}
-
+```{r csv_data_functs}
 
 split_donation <- function(df) {
   df <- df %>%
     separate(
-      col = "donation",
+      col = "Splits",
       into = c("AMOUNT1","AMOUNT2"),
       sep = " and "
     )
   df <- df %>%
     separate(
       col = "AMOUNT1",
-      into = c("AMOUNT1", "GIFT_NARRATIVE1|GIFT_DATE1|CHECKINFO1"),
+      into = c("AMOUNT1", "GIFT_NARRATIVE1"),
       sep = " for "
-    )
-  df <- df %>%
-    separate(
-      col = "GIFT_NARRATIVE1|GIFT_DATE1|CHECKINFO1",
-      into = c("GIFT_NARRATIVE1", "GIFT_DATE1|CHECKINFO1"),
-      sep = " received on "
-    )
-   df <- df %>%
-     separate(
-      col = "GIFT_DATE1|CHECKINFO1",
-      into = c("GIFT_DATE1", "CHECKINFO1"),
-      sep = " \\("
     )
   df <- df %>%
     separate(
       col = "AMOUNT2",
-      into = c("AMOUNT2", "GIFT_NARRATIVE2|GIFT_DATE2|CHECKINFO2"),
+      into = c("AMOUNT2", "GIFT_NARRATIVE2"),
       sep = " for "
     )
-  df <- df %>%
-    separate(
-      col = "GIFT_NARRATIVE2|GIFT_DATE2|CHECKINFO2",
-      into = c("GIFT_NARRATIVE2", "GIFT_DATE2|CHECKINFO2"),
-      sep = " received on "
-    )
-  df <- df %>%
-    separate(
-      col = "GIFT_DATE2|CHECKINFO2",
-      into = c("GIFT_DATE2", "CHECKINFO2"),
-      sep = " \\("
-    )
-   
-   df$CHECKINFO1 <- gsub("[^0-9.-]","", df$CHECKINFO1)
-   df$CHECKINFO2 <- gsub("[^0-9.-]","", df$CHECKINFO2)
 
    df$AMOUNT1 <- as.numeric(gsub('\\$', '', df$AMOUNT1))
    df$AMOUNT2 <- as.numeric(gsub('\\$','', df$AMOUNT2))
-   
-   
+   df <- df %>%
+     pivot_longer(
+       cols = c(AMOUNT1, AMOUNT2),
+       names_to = "AMOUNT_TYPE",
+       values_to = "AMOUNT"
+     )
+
    df <- df %>%
      mutate(
-       AMOUNT = case_when(
-          !is.na(AMOUNT2) ~ AMOUNT1 + AMOUNT2,
-          TRUE ~ AMOUNT1
-          ),
-       GIFT_DATE = case_when(
-         !is.na(GIFT_DATE2) ~ GIFT_DATE2,
-         TRUE ~ GIFT_DATE1
-       ),
        GIFT_NARRATIVE = case_when(
-         !is.na(GIFT_NARRATIVE2) ~ paste(GIFT_NARRATIVE1, GIFT_NARRATIVE2, sep = " and "),
-         TRUE ~ GIFT_NARRATIVE1
+         (AMOUNT_TYPE == "AMOUNT2") ~ GIFT_NARRATIVE2,
+         (AMOUNT_TYPE == "AMOUNT1") ~ GIFT_NARRATIVE1,
+         TRUE ~ NA_character_
        ),
-       CHECKINFO = case_when(
-         !is.na(CHECKINFO2) ~ CHECKINFO2,
-         TRUE ~ CHECKINFO1
-       )
      ) %>%
      select(
-       -GIFT_DATE1,
-       -GIFT_DATE2,
        -GIFT_NARRATIVE1,
        -GIFT_NARRATIVE2,
-       -AMOUNT1,
-       -AMOUNT2,
-       -CHECKINFO1,
-       -CHECKINFO2,
-     )
+       -AMOUNT_TYPE,
+     ) %>%
+     filter(!is.na(AMOUNT))
       
    
   return(df)
@@ -149,74 +154,172 @@ code_items <- function(df) {
       ),
       DONOR_TYPE = case_when(
         (!is.na(`Company Name`) && `Is Company?`) ~ "CO",
-        (!is.na(`Company Name`) && !`Is Company?`) ~ "FN",
+        (!is.na(`Company Name`) && !`Is Company?`) ~ "OR",
         TRUE ~ "IN"
       ),
-      GIFT_TYPE = case_when(
-        (!is.na(CHECKINFO)) ~ "CH",
-        TRUE ~ NA_character_
+      State = case_when(
+        nchar(State) <= 2 ~ toupper(State),
+        TRUE ~ State
       ),
-      REF = case_when(
-        (!is.na(CHECKINFO)) ~ CHECKINFO,
-        TRUE ~ NA_character_
-      ),
-      State = toupper(State)
+      GIFT_DATE = as.Date(`Received Date`, "%d-%b-%y"),
+
+      `Email Address` = tolower(`Email Address`),
+
+
     )
-  df$REF <- gsub("[^0-9]", "", df$REF)
-  df$`Phone Number` <- gsub("[^0-9]", "", df$`Phone Number`)
-  df$`Phone Number 2` <- gsub("[^0-9]", "", df$`Phone Number 2`)
   
-  df <- df %>%
-    mutate(
-      BUSINESS_PHONE = case_when(
-        (DONOR_TYPE == "CO")||(DONOR_TYPE == "FN") ~ `Phone Number`,
-        TRUE ~ NA_character_
-      ),
-      MOBILE_PHONE = case_when(
-        (DONOR_TYPE == "CO")||(DONOR_TYPE == "FN") ~ `Phone Number 2`,
-        TRUE ~ `Phone Number`
-      ),
-      HOME_PHONE = case_when(
-        (DONOR_TYPE == "IN") ~ `Phone Number 2`,
-        TRUE ~ NA_character_
-      )
-    )
+  df$`Phone Number` <- gsub("[^0-9]", "", df$`Phone Number`)
+  
   return(df)
 }
 
-add_extraneous_columns <- function(df) {
+add_other_columns <- function(df) {
   df <- df %>%
     mutate(
-      SPOUSE = NA,
-      FAX_PHONE = NA,
-      FMV = NA,
-      GL_CODE = NA,
-      CAMPAIGN = NA,
-      SOLICIT_CODE = NA,
-      SUB_SOLICIT_CODE = NA,
-    )
+      GSOLIC = NA_character_,
+      checked = FALSE
+      )
+  
+  first_vec <- name_table$first_name
+  last_vec <- name_table$last_name
+  for (row in 1:nrow(df)) {
+    if (!df[row,]$checked) {
+      
+      check_string = df[row,]$Memo
+      
+      for (row2 in 1:nrow(name_table)) {
+
+        last_name_match = any(grepl(pattern = name_table[row2,]$last_name, x = check_string, ignore.case = T))
+        if(is.na(last_name_match)) {last_name_match = F}
+        first_name_match = any(grepl(pattern = name_table[row2,]$first_name, x = check_string, ignore.case = T))
+        if(is.na(first_name_match)) {first_name_match = F}
+        unique_first = (str_count(first_vec, name_table[row2,]$first_name) == 1)
+        unique_last = (str_count(last_vec, name_table[row2,]$last_name) == 1)
+        if (last_name_match && unique_first) {  #Case when there is a last name available, and we know the first name for this last name is unique
+          df[row,]$checked = T
+          df[row,]$GSOLIC = paste(name_table[row2,]$first_name, name_table[row2,]$last_name, sep = " ")
+          df[row,]$GSOLIC = paste(df[row,]$GSOLIC, name_table[row2,]$ID, sep = " - ")
+        } else if (last_name_match && first_name_match) { #Case when there is a last name available, but the first name wasn't unique for this person, so we have to see if it's included
+          df[row,]$checked = T
+          df[row,]$GSOLIC = paste(name_table[row2,]$first_name, name_table[row2,]$last_name, sep = " ")
+          df[row,]$GSOLIC = paste(df[row,]$GSOLIC, name_table[row2,]$ID, sep = " - ")
+        } else if (first_name_match && unique_last) { #Case when the last_name didn't match, so we have to check for first name, and the last name for this first name is unique
+          df[row,]$checked = T
+          df[row,]$GSOLIC = paste(name_table[row2,]$first_name, name_table[row2,]$last_name, sep = " ")
+          df[row,]$GSOLIC = paste(df[row,]$GSOLIC, name_table[row2,]$ID, sep = " - ")
+        }
+      }
+      gsub(x = df[row,]$GSOLIC, pattern = " nolast", replacement = "")
+      gsub(x = df[row,]$GSOLIC, pattern = "nofirst ", replacement = "")
+      gsub(x = df[row,]$GSOLIC, pattern = " - noindex", replacement = "")
+    }
+  }
   return(df)
 }
+
 ```
 
 ```{r initial-data-cleansing}
-csv_data_flat <- csv_data %>%
-  pivot_longer(
-    cols = grep(
-        pattern = "Itemized Donations in",
-        ignore.case = TRUE,
-        x = colnames(csv_data)
-        ),
-    names_to = "don_year",
-    values_to = "donation"
-    )
+csv_data2 <- csv_data %>%
+  mutate(
+    ORG_REC = case_when(
+      (!is.na(`Company Name`))  ~ "Y",
+      TRUE ~ "N"
+    ),
+    DONOR_TYPE = case_when(
+      (!is.na(`Company Name`) && `Is Company?`) ~ "CO",
+      (!is.na(`Company Name`) && !`Is Company?`) ~ "OR",
+      TRUE ~ "IN"
+    ),
+    TITLE <- Prefix,
+    FIRST_NAME = `First Name`,
+    LAST_NAMe = case_when(
+      (!is.na(`Company Name`)) ~ `Company Name`,
+      TRUE ~ `Last Name`
+    ),
+    OPT_LINE = `Other Names`,
+    SPOUSE = case_when(
+      (is.na(`Company Name`)) ~ `Other Names`,
+      TRUE ~ NA_character_
+    ),
+    SALUTATION = `Recognition Name`,
+    ADDRESS = `Address Line 1`,
+    ADDRESS2 = `Address Line 2`,
+    CITY = City,
+    STATE = State,
+    ZIP = Postal,
+    COUNTRY = `Country`,
+    ADDRESS_TYPE = case_when(
+      (is.na(`Company Name`)) ~ "HOME",
+      TRUE ~ "WORK"
+    ),
+    PHONE = gsub(
+      pattern = "[ \\(\\)-]",
+      replacement = "",
+      x = `Phone Number`
+    ),
+    EMAIL = tolower(`Email Address`),
+    GIFT_DATE = as.Date(`Received Date`, "%d-%b-%y"),
+    AMOUNT = Amount,
+    REF = `Check Number`,
+    GIFT_TYPE = case_when(
+      `Donation Type` == "Check" ~ "CH",
+      `Donation Type` == "PayPal" ~ "PP",
+      `Donation Type` == "Online Donation" ~ "ON",
+      `Donation Type` == "One time General Donation" ~ "CC",
+      `Donation Type` == "Monthly General Donation" && is.na(`Check Number`) ~ "ACH",
+      TRUE ~ "CA",
+    ),
+    GL_CODE = NA_character_,
+    GSOLIC = NA_character_,
+    PLEDGE_PAYMENT = NA_character_,
+    GIFT_NARRATIVE = Memo
+  )
 
+for(i in 1:nrow(csv_data2)) {
+  row = csv_data2[i,]
+  if (grepl("SPONSORSHIP", x = row$Memo, ignore.case = T)) {
+    csv_data2[i,]$GL_CODE = "SPONSORSHIP"
+  } else {
+    csv_data2[i,]$GL_CODE = "UN"
+  }
+  
+  if (grepl("paid in full", x = row$Memo, ignore.case = T)) {
+    csv_data2[i,]$PLEDGE_PAYMENT = "N"
+  } else if (any(grepl("Monthly|Bridge Way|Sponsorship", x = row$Memo, ignore.case = T))) {
+    csv_data2[i,]$PLEDGE_PAYMENT = "Y"
+  } else if (any(grepl("JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC", x = row$Memo, ignore.case = T))) {
+    csv_data2[i,]$PLEDGE_PAYMENT = "Y"
+  } else {
+    csv_data2[i,]$PLEDGE_PAYMENT = "N"
+  }
+}
 
-csv_data_flat <- csv_data_flat %>%
-  separate_donations() %>%
-  split_donation() %>%
-  code_items() %>%
-  add_extraneous_columns()
+for (j in 1:nrow(csv_data2)){
+  memo = csv_data2[j,]$Memo
+  for (i in 1:nrow(name_table)) {
+    
+    first = name_table[i,]$first_name
+    last = name_table[i,]$last_name
+    id = name_table[i,]$ID
+    
+    if (any(grepl(pattern = first, x = memo, ignore.case = T)) && any(grepl(pattern = last, x = memo, ignore.case = T))) {
+      csv_data2[j,]$GSOLIC = paste(paste(first,last, sep = " "), id, sep = " - ")
+    } else if (any(grepl(pattern = first, x = memo, ignore.case = T)) && !any(grepl(pattern = last, x = memo, ignore.case = T))) {
+      if (nrow(name_table[grepl(pattern = last, x = name_table$last_name, ignore.case = T),]) == 1) {
+        csv_data2[j,]$GSOLIC = paste(paste(first,last, sep = " "), id, sep = " - ")
+      } else {
+        csv_data2[j,]$GSOLIC = first
+      }
+    } else if (!any(grepl(pattern = first, x = memo, ignore.case = T)) && any(grepl(pattern = last, x = memo, ignore.case = T))) {
+      if (nrow(name_table[grepl(pattern = first, x = name_table$first_name, ignore.case = T),])) {
+        csv_data2[j,]$GSOLIC = paste(paste(first,last, sep = " "), id, sep = " - ")
+      } else {
+        csv_data2[j,]$GSOLIC = last
+      }
+    }
+  }
+}
 
 ```
 
@@ -226,30 +329,27 @@ final_export <- csv_data_flat %>%
   select(
     ORG_REC,
     DONOR_TYPE,
-    TITLE = `Prefix`,
-    FIRST_NAME = `First Name`,
-    LAST_NAME = `Last Name`,
-    OPT_LINE = `Full Name 2`,
+    TITLE,
+    FIRST_NAME,
+    LAST_NAME,
+    OPT_LINE,
     SPOUSE,
-    SALUTATION = `Recognition Name`,
-    ADDRESS = `Street Address`,
-    ADDRESS2 = `Street Address 2`,
-    CITY = `City`,
-    STATE = `State`,
-    ZIP = `Postal Code`,
-    ADDRESS_TYPE = `Address Type`,
+    SALUTATION,
+    ADDRESS,
+    ADDRESS2,
+    CITY,
+    STATE,
+    ZIP,
+    ADDRESS_TYPE,
     MOBILE_PHONE,
     BUSINESS_PHONE,
     HOME_PHONE,
-    FAX_PHONE,
-    EMAIL = `Email Address`,
+    EMAIL,
     GIFT_DATE,
     AMOUNT,
-    FMV,
     GL_CODE,
-    CAMPAIGN,
-    SOLICIT_CODE,
-    SUB_SOLICIT_CODE,
+    GSOLIC,
+    PLEDGE_PAYMENT,
     REF,
     GIFT_TYPE,
     GIFT_NARRATIVE
@@ -257,10 +357,10 @@ final_export <- csv_data_flat %>%
 ```
 
 ```{r export}
+unlink("data/final.csv")
 write.csv(
   x = final_export,
   file = "data/final.csv",
   na = "",
-  sep = ","
   )
 ```
